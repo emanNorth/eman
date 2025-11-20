@@ -8,6 +8,8 @@ requests
 psutil
 numpy
 matplotlib
+dash
+plotly
 
 # Imports for Part 04
 sense-emu
