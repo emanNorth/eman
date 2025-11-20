@@ -20,7 +20,8 @@ The path structure in this repository is designed to be as simple as possible to
 ### Exercises
 - The `exercises` aims to simply call out a package per lab module - that is, `labmodule01` is a package, yet it may contain multiple modules (or Python files). Later packages may have dependencies on earlier packages as exercises get more complex and OO concepts are applied. That is, modules defined in `labmodule03` may be useful (and used in) modules defined in, for example, `labmodule10`. It is not a goal of this course to require such dependencies, this statement is merely an acknowledgement that they may naturally exist. There are no expectations, however, that the reverse will be the case - that is, `labmodule03` should never contain any module or logic that depends upon a later lab module, such as `labmodule10`.
 - Exercises path structure (SUBJECT TO CHANGE):
-'''
+
+```
 ./ipp
   ./__init__.py
   ./app
@@ -74,7 +75,7 @@ The path structure in this repository is designed to be as simple as possible to
         ./README.md
         ./README-PROPOSAL.md
         ./{module(s) here}
-'''
+```
 
 ### A Brief FAQ
 - Why the extra `ipp` in the path name?
@@ -91,7 +92,8 @@ The path structure in this repository is designed to be as simple as possible to
 ### Tests
 - The `tests` path mimics the exercises path. It contains packages for each lab module, although not all lab modules will have tests. The student may choose to add their own test(s) to correspond with exercise implementations in the exercises path.
 - Tests path structure (SUBJECT TO CHANGE):
-'''
+
+```
 ./tests
   ./__init__.py
   ./common
@@ -131,7 +133,7 @@ The path structure in this repository is designed to be as simple as possible to
   ./labmodule10
     ./__init__.py
     ./{test module(s) here}
-'''
+```
 
 ## Links, Exercises, Updates, Errata, and Clarifications
 
@@ -179,11 +181,13 @@ This repository has external dependencies on other open source projects.
   - Reference: The Raspberry Pi Foundation. Sense HAT Emulator. (2016) [Online]. Available: https://sense-emu.readthedocs.io/en/v1.0/.
 - [pisense](https://pisense.readthedocs.io/en/release-0.2/#)
   - Reference: D. Jones. Pisense. (2016 – 2018) [Online]. Available: https://pisense.readthedocs.io/en/release-0.2/.
+- [requests](https://github.com/psf/requests)
+  - Reference: Python Software Foundation. Requests. (2025) [Online]. Available: https://github.com/psf/requests.
+
+Additional Library References (for in-class examples not currently used in assignments; e.g., Computer Vision examples):
+
 - [paho-mqtt](https://www.eclipse.org/paho/)
   - Reference: Eclipse Foundation, Inc. Eclipse Paho™ MQTT Python Client. (2020) [Online]. Available: https://github.com/eclipse/paho.mqtt.python.
-
-Additional Library References (for in-class Computer Vision examples):
-
 - [imutils](https://pypi.org/project/imutils/)
   - Reference: A. Rosebrock. imutils. (2020) [Online]. Available: https://pypi.org/project/imutils/.
 - [opencv-python](https://pypi.org/project/opencv-python/)
@@ -223,3 +227,5 @@ Please refer to the referenced [ipp-exercise-components](https://github.com/prog
 If any code samples or other technology this work contains or describes is subject to open source licenses or the intellectual property rights of others, it is your responsibility to ensure that your use thereof complies with such licenses and/or rights.
 
 For addition information on code references used in this board, see [IPP-DOC-REF](https://github.com/programming-in-python/ipp-exercise-tasks/issues/4).
+
+
