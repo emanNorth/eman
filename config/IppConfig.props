@@ -1,3 +1,24 @@
+
+[WeatherPredictorApp]
+appName           = SimpleWeatherPredictor
+enablePrediction  = True
+useWebInterface   = False
+runDurationSecs   = 60
+deviceName        = weatherPredictor001
+enableLogging     = True
+
+[Settings.Weather]
+serviceName       = NOAA Weather Service
+baseUrl           = https://api.weather.gov
+userAgent         = SimpleWeatherApp/1.0
+contentType       = application/json
+pollCycleSecs     = 15
+requestTimeoutSecs = 30
+# Weather station IDs for polling (comma-separated)
+pollStationIDs    = KBOS,KJFK,KLAX
+
+
+
 #####
 # Configuration file for the Intro to Python Programming course
 #
