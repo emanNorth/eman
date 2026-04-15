@@ -39,18 +39,25 @@ class SimpleWeatherPredictorApp():
         #  - maxHistory
         #  - value of k
         #  - bool for useSim
+        # True = use simulated weather data; False = use live data
         self.useSim = True
+        # Max number of past weather records to store
         self.maxHistory = 50
+        # Number of neighbors for KNN predictions
         self.k = 3
 
         # Core components
+        # Collects weather data
         self.collector = WeatherHistoryDataCollector(maxHistory=self.maxHistory)
+        # KNN-based weather predictor
         self.predictor = SimpleWeatherPredictor(k=self.k)
+        # Visualizes predictions and history
         self.visualizer = PredictedWeatherDataClientVisualizer(
             predictor=self.predictor, dataCollector=self.collector)
 
         # Weather service components (for non-simulation mode)
         if not self.useSim:
+            # Handles live weather data fetching
             self.wsManager = WeatherServiceManager()
             # Create aggregator to distribute data
             self.aggregator = WeatherDataAggregator(
@@ -63,7 +70,7 @@ class SimpleWeatherPredictorApp():
             self.wsManager = None
             self.aggregator = None
 
-        # Thread control
+        # Thread controls for running prediction and simulation loops
         self.predictionThread = None
         self.predictionRunning = False
         self.simulationThread = None

@@ -27,19 +27,25 @@ class PredictedWeatherDataClientVisualizer(WeatherDataListener):
         '''
         super().__init__()
 
+        # References to predictor and data collector
         self.predictor = predictor
         self.dataCollector = dataCollector
 
-        # Thread-safe storage
+        # Thread-safe storage for live and predicted weather data
+        # Stores most recent live data
         self.liveWeatherDataTable: Dict[str, WeatherData] = {}
+        # Stores predicted values
         self.predictedWeatherDataTable: Dict[str, Dict] = {}
+        # Lock to prevent race conditions when accessing data
         self.dataLock = Lock()
 
         self.isTrained = False
+        # Counter for how many prediction updates occurred
         self.predictionUpdateCount = 0
 
         # Setup visualization
         self.vizPlotFigure, self.vizPlotAxes = plt.subplots(2, 1, figsize=(12, 10))
+        # Main title
         self.vizPlotFigure.suptitle(
             'Live Weather vs KNN Predictions',
             fontsize=16,
@@ -57,9 +63,9 @@ class PredictedWeatherDataClientVisualizer(WeatherDataListener):
         Initializes the matplotlib plots for visualization.
         '''
         # Temperature plot
-        self.vizPlotAxes[0].set_title('Temperature (°C): Actual vs Predicted')
-        self.vizPlotAxes[0].set_ylabel('Temperature (°C)')
-        self.vizPlotAxes[0].grid(True, alpha=0.3)
+        self.vizPlotAxes[0].set_title('Temperature (°C): Actual vs Predicted') # Set title for temperature plot
+        self.vizPlotAxes[0].set_ylabel('Temperature (°C)') # Y-axis label
+        self.vizPlotAxes[0].grid(True, alpha=0.3) # Add light grid for readability
 
         # Humidity plot
         self.vizPlotAxes[1].set_title('Humidity (%): Actual vs Predicted')
@@ -72,6 +78,7 @@ class PredictedWeatherDataClientVisualizer(WeatherDataListener):
 
         self.vizPlotAxes[0].legend(handles=[actual, predicted])
 
+        # Adjust layout to prevent overlap of titles, labels, and plots
         self.vizPlotFigure.tight_layout()
 
     def updatePrediction(self, predictions: Dict, actual: Dict):
@@ -82,11 +89,16 @@ class PredictedWeatherDataClientVisualizer(WeatherDataListener):
             predictions (Dict): Predicted values.
             actual (Dict): Actual weather values.
         '''
+        # Ensure thread-safe access to shared data tables
         with self.dataLock:
             station = actual.get('station', 'Unknown')
-
+            
+            # Store the latest predictions for this station
             self.predictedWeatherDataTable[station] = predictions
+            # Increment counter to track how many updates have occurred
             self.predictionUpdateCount += 1
+
+
 
             if self.predictor and self.predictor.isTrained:
                 self.isTrained = True

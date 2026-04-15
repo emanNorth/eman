@@ -24,7 +24,9 @@ class SimpleWeatherPredictor:
         self.humidityPredictor = SimpleKnnAlgorithm(k)
         self.pressurePredictor = SimpleKnnAlgorithm(k)
         
+        # Flag to check if models are trained
         self.isTrained = False
+        # Counter for number of training iterations
         self.trainingCount = 0
         
         
@@ -43,6 +45,7 @@ class SimpleWeatherPredictor:
             print("Need at least 3 records for training")
             return {}
         
+        # Lists to store training samples for each metric
         tempData = []
         humidityData = []
         pressureData = []
@@ -81,6 +84,7 @@ class SimpleWeatherPredictor:
                 target = current['pressure']
                 pressureData.append((features, target))
         
+        # Return training data for all three metrics
         return {
             'temperature': tempData,
             'humidity': humidityData,
@@ -106,19 +110,22 @@ class SimpleWeatherPredictor:
         if not trainingData:
             return False
         
-        # Train each predictor
+        # counter for how many models were trained
         trainedModels = 0
         
+        # Train temperature predictor if data available
         if 'temperature' in trainingData and trainingData['temperature']:
             self.tempPredictor.setTrainingData(trainingData['temperature'])
             trainedModels += 1
             print(f"Temperature predictor trained with {len(trainingData['temperature'])} samples")
         
+         # Train humidity predictor if data available
         if 'humidity' in trainingData and trainingData['humidity']:
             self.humidityPredictor.setTrainingData(trainingData['humidity'])
             trainedModels += 1
             print(f"Humidity predictor trained with {len(trainingData['humidity'])} samples")
-        
+            
+        # Train pressure predictor if data available
         if 'pressure' in trainingData and trainingData['pressure']:
             self.pressurePredictor.setTrainingData(trainingData['pressure'])
             trainedModels += 1
@@ -144,6 +151,7 @@ class SimpleWeatherPredictor:
         Returns:
             Dict[str, Optional[float]]: Predicted values for each metric.
         '''
+        # Default predictions
         predictions = {
             'temperature': None,
             'humidity': None,
@@ -162,23 +170,22 @@ class SimpleWeatherPredictor:
         prevRecord2 = recentData[-2]
         prevRecord1 = recentData[-1]
         
-        # Predict temperature
+        # Predict temperature if data available
         if prevRecord2.get('temperature') is not None and prevRecord1.get('temperature') is not None:
             features = [prevRecord2['temperature'], prevRecord1['temperature']]
             predictions['temperature'] = self.tempPredictor.predictRegression(features)
         
-        # Predict humidity
+        # Predict humidity if data available
         if prevRecord2.get('humidity') is not None and prevRecord1.get('humidity') is not None:
             features = [prevRecord2['humidity'], prevRecord1['humidity']]
             predictions['humidity'] = self.humidityPredictor.predictRegression(features)
         
-        # Predict pressure
+        # Predict pressure if data available
         if prevRecord2.get('pressure') is not None and prevRecord1.get('pressure') is not None:
             features = [prevRecord2['pressure'], prevRecord1['pressure']]
             predictions['pressure'] = self.pressurePredictor.predictRegression(features)
         
         return predictions
-    
     
     
     def evaluatePredictions(self, predictions: Dict, actual: Dict) -> Dict[str, Dict]:
