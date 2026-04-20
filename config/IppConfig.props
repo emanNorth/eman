@@ -1,4 +1,19 @@
 
+
+[Settings.Water]
+serviceName        = USGS NWIS Water Service
+baseUrl            = https://api.waterdata.usgs.gov/ogcapi/v0
+collection         = latest-continuous
+endpoint           = items
+userAgent          = WaterApp/1.0
+contentType        = application/json
+pollCycleSecs      = 15
+requestTimeoutSecs = 30
+pollStationIDs     = USGS-01646500,USGS-11455420,USGS-09380000
+limit              = 10
+format             = json
+
+
 [WeatherPredictorApp]
 appName           = SimpleWeatherPredictor
 enablePrediction  = True
