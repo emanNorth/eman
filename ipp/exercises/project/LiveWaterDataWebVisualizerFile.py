@@ -1,3 +1,4 @@
+
 import time
 import random
 from threading import Thread, Lock
@@ -25,41 +26,48 @@ class LiveWaterDataWebVisualizer(WaterDataListener):
     Includes both bar charts (value bound) and a time series line chart (time bound)
     that updates automatically as new data arrives.
     '''
+    
     COLORS = {
         'background': '#1a1a2e',
         'card': '#16213e',
         'text': '#ffffff',
         'level': '#3498db',
-        'flow': '#2ecc71',
-        'temp': '#e74c3c'
+        'flow': "#2D8C53",
+        'temp': "#dcc38e"
     }
+
+    # Per-station flood risk thresholds (cfs)
+    # Based on typical flood stage flow rates for each river
+    FLOOD_THRESHOLDS = {
+        'USGS-01646500': 25000,   # Potomac River - flood stage ~25,000 cfs
+        'USGS-06730500': 800,     # Boulder Creek - flood stage ~800 cfs (smaller river)
+        'USGS-02037500': 15000,   # James River - flood stage ~15,000 cfs
+    }
+    
+    # Default threshold for unknown stations
+    DEFAULT_FLOOD_THRESHOLD = 10000
 
     def __init__(self, host: str = '127.0.0.1', port: int = 8050):
         '''
         Initializes the visualizer.
 
-        - Creates Dash app and layout
-        - Sets storage for live and historical water data
-        - Configures refresh rate for dashboard updates
+        Creates Dash app and layout, sets storage for live and historical
+        water data, and configures refresh rate for dashboard updates.
 
         Args:
-            host (str): IP address of Dash server
-            port (int): Port number for Dash server
+            host (str): IP address of Dash server.
+            port (int): Port number for Dash server.
         '''
         super().__init__()
         self.sort_mode = "site"
         self.host = host
         self.port = port
         self.dataLock = Lock()
-        
 
-        # latest readings per station
         self.liveWaterDataTable: Dict[str, WaterData] = {}
-        # time-bound flow history per station
         self.flowHistory: Dict[str, List[float]] = {}
-        self.maxPoints = 20  # number of data points kept per station
+        self.maxPoints = 20
 
-        # Dash app setup
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
         self.app.title = 'Live Water Data Dashboard'
 
@@ -68,28 +76,58 @@ class LiveWaterDataWebVisualizer(WaterDataListener):
 
     def _setupLayout(self):
         '''
-        Defines the layout of the web dashboard.
+        Builds the Dash application layout.
+
+        Creates the main dashboard structure including:
+        - Title header with flood alert indicator
+        - Summary statistics cards
+        - Sort buttons for data organization
+        - Chart containers for visualizations
+        - Auto-refresh interval component
         '''
         self.app.layout = html.Div(
             style={'backgroundColor': self.COLORS['background'],
                    'padding': '20px', 'minHeight': '100vh'},
             children=[
-                html.H1(
-                    'Live Water Data Dashboard (USGS)',
-                    style={'color': self.COLORS['text'],
-                           'textAlign': 'center',
-                           'marginBottom': '25px'}
+                # Title + Flood Alert Indicator together
+                html.Div(
+                    style={
+                        'display': 'flex',
+                        'alignItems': 'center',
+                        'justifyContent': 'center',
+                        'marginBottom': '25px'
+                    },
+                    children=[
+                        html.H1(
+                            'Live Water Data Dashboard (USGS)',
+                            style={'color': self.COLORS['text'], 'margin': '0'}
+                        ),
+                        html.Div(
+                            id='risk-indicator',
+                            children='FLOOD ALERT',
+                            style={
+                                'backgroundColor': 'gray',
+                                'color': 'white',
+                                'padding': '6px 12px',
+                                'borderRadius': '4px',
+                                'fontSize': '12px',
+                                'fontWeight': 'bold',
+                                'marginLeft': '15px',
+                                'opacity': '0.4'
+                            }
+                        )
+                    ]
                 ),
 
                 html.Div(id='stats-summary', style={'marginBottom': '20px'}),
-                
+
                 html.Div([
                     html.Button("Sort by Flow Rate", id="btn-flow"),
                     html.Button("Sort by Water Level", id="btn-level"),
                     html.Button("Sort by Temperature", id="btn-temp"),
-                    html.Button("Sort by Site Name", id="btn-name"),], 
-                         style={'textAlign': 'center', 'marginBottom': '20px'}),
-                
+                    html.Button("Sort by Site Name", id="btn-name"),
+                ], style={'textAlign': 'center', 'marginBottom': '20px'}),
+
                 html.Div(
                     id='charts-container',
                     style={'display': 'grid',
@@ -97,33 +135,47 @@ class LiveWaterDataWebVisualizer(WaterDataListener):
                            'gap': '20px'}
                 ),
 
-                # 2-second update interval
                 dcc.Interval(id='interval', interval=2000, n_intervals=0)
             ]
         )
 
     def _setupCallbacks(self):
         '''
-        Connects dynamic update events to the dashboard.
+        Registers Dash callbacks for interactive dashboard updates.
+
+        Handles:
+        - Periodic data refresh via interval component
+        - Sort button clicks to reorder data
+        - Flood alert indicator state changes
+        - Chart and summary regeneration
         '''
         @self.app.callback(
             Output('stats-summary', 'children'),
             Output('charts-container', 'children'),
+            Output('risk-indicator', 'style'),
             Input('interval', 'n_intervals'),
             Input('btn-flow', 'n_clicks'),
             Input('btn-level', 'n_clicks'),
             Input('btn-temp', 'n_clicks'),
             Input('btn-name', 'n_clicks')
         )
-        
         def updateDashboard(_, f, l, t, n):
             '''
-            Refreshes the summary and chart data.
+            Updates all dashboard components on each interval tick or button click.
+
+            Args:
+                _: Interval tick count (unused).
+                f: Flow button click count.
+                l: Level button click count.
+                t: Temperature button click count.
+                n: Name button click count.
+
+            Returns:
+                tuple: (summary component, charts list, indicator style dict)
             '''
             ctx = dash.callback_context
             if ctx.triggered:
                 button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
                 if button_id == "btn-flow":
                     self.sort_mode = "flow"
                 elif button_id == "btn-level":
@@ -132,17 +184,31 @@ class LiveWaterDataWebVisualizer(WaterDataListener):
                     self.sort_mode = "temp"
                 elif button_id == "btn-name":
                     self.sort_mode = "site"
-                    
+
+            # Default dim style for indicator (no flood risk)
+            dim_style = {
+                'backgroundColor': 'gray',
+                'color': 'white',
+                'padding': '6px 12px',
+                'borderRadius': '4px',
+                'fontSize': '12px',
+                'fontWeight': 'bold',
+                'marginLeft': '15px',
+                'opacity': '0.4'
+            }
+
             with self.dataLock:
                 if not self.liveWaterDataTable:
                     empty = html.Div(
                         'Waiting for live water data...',
                         style={'textAlign': 'center',
                                'color': self.COLORS['text'],
-                               'padding': '40px'})
-                    return empty, []
+                               'padding': '40px'}
+                    )
+                    return empty, [], dim_style
 
                 waterList = list(self.liveWaterDataTable.values())
+
                 if self.sort_mode == "flow":
                     waterList.sort(key=lambda w: w.flowRate_cfs, reverse=True)
                 elif self.sort_mode == "level":
@@ -151,24 +217,93 @@ class LiveWaterDataWebVisualizer(WaterDataListener):
                     waterList.sort(key=lambda w: w.waterTemperature_c, reverse=True)
                 else:
                     waterList.sort(key=lambda w: w.location.siteName)
-                
+
+                # Check if ANY station exceeds its flood threshold
+                any_flood_risk = self._checkFloodRisk(waterList)
+
+                # Set indicator style based on flood risk
+                if any_flood_risk:
+                    indicator_style = {
+                        'backgroundColor': '#e74c3c',
+                        'color': 'white',
+                        'padding': '6px 12px',
+                        'borderRadius': '4px',
+                        'fontSize': '12px',
+                        'fontWeight': 'bold',
+                        'marginLeft': '15px',
+                        'opacity': '1'
+                    }
+                else:
+                    indicator_style = dim_style
+
                 summary = self._createSummary(waterList)
                 charts = self._createCharts(waterList)
-                return summary, charts
-       
+                return summary, charts, indicator_style
+
+    def _checkFloodRisk(self, waterList: List[WaterData]) -> bool:
+        '''
+        Checks if any station has flow rate exceeding its flood threshold.
+
+        Each station has a specific threshold based on historical flood
+        stage data. Unknown stations use a default threshold.
+
+        Args:
+            waterList (List[WaterData]): List of water data readings.
+
+        Returns:
+            bool: True if any station exceeds its flood threshold.
+        '''
+        for w in waterList:
+            siteID = w.location.siteID
+            threshold = self.FLOOD_THRESHOLDS.get(siteID, self.DEFAULT_FLOOD_THRESHOLD)
+            if w.flowRate_cfs > threshold:
+                return True
+        return False
+
+    def _getStationThreshold(self, siteID: str) -> float:
+        '''
+        Returns the flood threshold for a specific station.
+
+        Args:
+            siteID (str): The USGS station identifier.
+
+        Returns:
+            float: Flood threshold in cubic feet per second (cfs).
+        '''
+        return self.FLOOD_THRESHOLDS.get(siteID, self.DEFAULT_FLOOD_THRESHOLD)
 
     def _createSummary(self, waterList: List[WaterData]):
         '''
-        Builds average summary statistics.
+        Creates the summary statistics cards section.
+
+        Displays aggregate metrics including:
+        - Number of active stations
+        - Average flow rate across all stations
+        - Average water level across all stations
+        - Average temperature across all stations
 
         Args:
-            waterList (List[WaterData]): current water data per site
+            waterList (List[WaterData]): List of water data readings.
+
+        Returns:
+            html.Div: Dash component containing summary cards.
         '''
         avgLevel = sum(w.waterLevel_ft for w in waterList) / len(waterList)
         avgFlow = sum(w.flowRate_cfs for w in waterList) / len(waterList)
         avgTemp = sum(w.waterTemperature_c for w in waterList) / len(waterList)
 
         def card(label, value, color):
+            '''
+            Creates a single summary card component.
+
+            Args:
+                label (str): Card title text.
+                value (str): Card value to display.
+                color (str): Accent color for the card.
+
+            Returns:
+                html.Div: Styled card component.
+            '''
             return html.Div(
                 style={'backgroundColor': self.COLORS['card'],
                        'padding': '20px',
@@ -176,139 +311,195 @@ class LiveWaterDataWebVisualizer(WaterDataListener):
                        'borderLeft': f'4px solid {color}',
                        'textAlign': 'center'},
                 children=[
-                    html.H4(label, style={'color': self.COLORS['text'],
-                                          'marginBottom': '8px'}),
+                    html.H4(label, style={'color': self.COLORS['text'], 'marginBottom': '8px'}),
                     html.H2(value, style={'color': color})
                 ]
             )
 
-        return html.Div(
-            style={'display': 'grid',
-                   'gridTemplateColumns': 'repeat(4, 1fr)',
-                   'gap': '15px'},
-            children=[
-                card('Stations', str(len(waterList)), self.COLORS['text']),
-                card('Avg Flow (cfs)', f'{avgFlow:.1f}', self.COLORS['flow']),
-                card('Avg Level (ft)', f'{avgLevel:.2f}', self.COLORS['level']),
-                card('Avg Temp (°C)', f'{avgTemp:.1f}', self.COLORS['temp'])
-            ]
-        )
+        return html.Div([
+            html.Div(
+                style={'display': 'grid',
+                       'gridTemplateColumns': 'repeat(4, 1fr)',
+                       'gap': '15px',
+                       'marginBottom': '15px'},
+                children=[
+                    card('Stations', str(len(waterList)), self.COLORS['text']),
+                    card('Avg Flow (cfs)', f'{avgFlow:.1f}', self.COLORS['flow']),
+                    card('Avg Level (ft)', f'{avgLevel:.2f}', self.COLORS['level']),
+                    card('Avg Temp (°C)', f'{avgTemp:.1f}', self.COLORS['temp']),
+                ]
+            ),
+        ])
 
     def _createCharts(self, waterList: List[WaterData]):
         '''
-        Builds full set of visual charts.
+        Creates all chart components for the dashboard.
+
+        Generates:
+        - Flow rate bar chart (with flood risk coloring)
+        - Water level bar chart
+        - Temperature bar chart
+        - Flow rate time series line chart
+
+        Args:
+            waterList (List[WaterData]): List of water data readings.
 
         Returns:
-            list: chart components for dashboard.
+            list: List of Dash Graph components.
         '''
         siteNames = [w.location.siteName for w in waterList]
 
         def makeBar(title, values, color):
-            fig = go.Figure(
-                go.Bar(
-                    x=siteNames,
-                    y=values,
-                    marker_color=color,
-                    hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
-                )
-            )
+            '''
+            Creates a standard bar chart component.
+
+            Args:
+                title (str): Chart title.
+                values (list): Y-axis values for each bar.
+                color (str): Bar color.
+
+            Returns:
+                dcc.Graph: Plotly bar chart component.
+            '''
+            fig = go.Figure(go.Bar(
+                x=siteNames,
+                y=values,
+                marker_color=color
+            ))
             fig.update_layout(
                 title=title,
-                xaxis_title="Monitoring Station",
-                yaxis_title="Value",
                 paper_bgcolor=self.COLORS['card'],
                 plot_bgcolor=self.COLORS['card'],
-                font=dict(color=self.COLORS['text']),
-                margin=dict(t=50, b=80)
+                font=dict(color=self.COLORS['text'])
             )
             return dcc.Graph(figure=fig, config={'displayModeBar': False})
 
-        # Create value-bound charts
-        flowChart = makeBar('Flow Rate (cfs)', [w.flowRate_cfs for w in waterList], self.COLORS['flow'])
-        levelChart = makeBar('Water Level (ft)', [w.waterLevel_ft for w in waterList], self.COLORS['level'])
-        tempChart = makeBar('Water Temperature (°C)', [w.waterTemperature_c for w in waterList], self.COLORS['temp'])
+        levelChart = makeBar("Water Level (ft)", [w.waterLevel_ft for w in waterList], self.COLORS['level'])
+        tempChart = makeBar("Temperature (°C)", [w.waterTemperature_c for w in waterList], self.COLORS['temp'])
 
-        # Create time-bound flow rate chart
-        timeSeries = self._createFlowRateTimeSeries()
+        # Flow chart with conditional coloring based on flood risk
+        flowValues = [w.flowRate_cfs for w in waterList]
+        flowColors = []
+        for w in waterList:
+            threshold = self._getStationThreshold(w.location.siteID)
+            if w.flowRate_cfs > threshold:
+                flowColors.append('#e74c3c')  # Red for flood risk
+            else:
+                flowColors.append(self.COLORS['flow'])  # Normal green
 
-        return [flowChart, levelChart, tempChart, timeSeries]
+        flowChart = go.Figure(go.Bar(
+            x=siteNames,
+            y=flowValues,
+            marker_color=flowColors
+        ))
+
+        flowChart.update_layout(
+            title="Flow Rate (cfs)",
+            paper_bgcolor=self.COLORS['card'],
+            plot_bgcolor=self.COLORS['card'],
+            font=dict(color=self.COLORS['text'])
+        )
+
+        flowChart = dcc.Graph(figure=flowChart, config={'displayModeBar': False})
+
+        timeSeriesChart = self._createFlowRateTimeSeries()
+        return [flowChart, levelChart, tempChart, timeSeriesChart]
+
+    def _processWaterData(self, waData: WaterData = None):
+        '''
+        Processes incoming water data from the listener pipeline.
+
+        Stores the latest reading for each station and maintains
+        a rolling history of flow rate values for time series display.
+
+        Args:
+            waData (WaterData): Incoming water data object.
+        '''
+        if not waData:
+            return
+
+        with self.dataLock:
+            siteID = waData.location.siteID
+
+            self.liveWaterDataTable[siteID] = waData
+
+            if siteID not in self.flowHistory:
+                self.flowHistory[siteID] = []
+
+            self.flowHistory[siteID].append(waData.flowRate_cfs)
+
+            if len(self.flowHistory[siteID]) > self.maxPoints:
+                self.flowHistory[siteID] = self.flowHistory[siteID][-self.maxPoints:]
 
     def _createFlowRateTimeSeries(self):
         '''
-        Builds a time series line chart showing recent flow rate per station.
+        Creates the flow rate time series line chart.
+
+        Displays historical flow rate readings for each station
+        over the last N time steps, allowing trend visualization.
+
+        Returns:
+            dcc.Graph: Plotly line chart component.
         '''
         fig = go.Figure()
-        colors = ['#2ecc71', '#3498db', '#e74c3c', '#f1c40f']
+
+        colors = ['#2D8C53', '#3498db', '#e74c3c', '#f1c40f']
 
         for i, (siteID, readings) in enumerate(self.flowHistory.items()):
             if len(readings) < 2:
                 continue
-            x_vals = list(range(1, len(readings) + 1))
+
+            if siteID not in self.liveWaterDataTable:
+                continue
+
             siteName = self.liveWaterDataTable[siteID].location.siteName
+
+            x_vals = list(range(len(readings)))
+
             fig.add_trace(go.Scatter(
                 x=x_vals,
                 y=readings,
                 mode='lines+markers',
-                line=dict(color=colors[i % len(colors)], width=2),
                 name=siteName,
-                hovertemplate=f'<b>{siteName}</b><br>Reading %{{x}}<br>Flow %{{y:.2f}} cfs<extra></extra>'
+                line=dict(color=colors[i % len(colors)], width=2)
             ))
 
         fig.update_layout(
-            title='Flow Rate Over Time (Time‑Bound)',
-            xaxis_title='Recent Readings',
-            yaxis_title='Flow Rate (cfs)',
+            title="Flow Rate Over Time (Time-Bound)",
             paper_bgcolor=self.COLORS['card'],
             plot_bgcolor=self.COLORS['card'],
             font=dict(color=self.COLORS['text']),
-            margin=dict(t=60, b=60)
+            xaxis_title="Time Steps",
+            yaxis_title="Flow Rate (cfs)"
         )
+
         return dcc.Graph(figure=fig, config={'displayModeBar': False})
-
-
-    def _processWaterData(self, waData: WaterData = None):
-        '''
-        Receives new WaterData from manager or simulation
-        and updates both current readings and time history.
-        '''
-        if not waData:
-            return
-        with self.dataLock:
-            self.liveWaterDataTable[waData.location.siteID] = waData
-    
-
-            if waData.location.siteID not in self.flowHistory:
-                self.flowHistory[waData.location.siteID] = []
-            self.flowHistory[waData.location.siteID].append(waData.flowRate_cfs)
-            # Keep only most recent N points
-            if len(self.flowHistory[waData.location.siteID]) > self.maxPoints:
-                self.flowHistory[waData.location.siteID] = self.flowHistory[waData.location.siteID][-self.maxPoints:]
 
     def startVisualizer(self):
         '''
-        Starts the Dash web dashboard.
-        '''
-        print(f'\nDashboard running at http://{self.host}:{self.port}/')
-        print('Press CTRL+C to stop\n')
-        self.app.run(host=self.host, port=self.port,
-                     debug=False, use_reloader=False)
+        Starts the Dash web server.
 
+        Launches the dashboard on the configured host and port.
+        This method blocks until the server is stopped.
+        '''
+        print(f"Dashboard running at http://{self.host}:{self.port}/")
+        self.app.run(host=self.host, port=self.port, debug=False)
 
 
 if __name__ == '__main__':
-    '''
-    Simple test run to demonstrate live updates.
-
-    Generates fake water records for three stations and visualizes
-    both their instantaneous and historical values.
-    '''
     visualizer = LiveWaterDataWebVisualizer()
 
     def simulateData():
+        '''
+        Simulates water data for testing the dashboard.
+
+        Generates random readings for three stations with values
+        that occasionally exceed flood thresholds to test alerts.
+        '''
         stations = [
             ('USGS-01646500', 'Potomac River – Washington, DC'),
-            ('USGS-11455420', 'Sacramento River – CA'),
-            ('USGS-09380000', 'Colorado River – AZ')
+            ('USGS-06730500', 'Boulder Creek – Longmont, CO'),
+            ('USGS-02037500', 'James River – Richmond, VA')
         ]
 
         while True:
@@ -317,7 +508,15 @@ if __name__ == '__main__':
                 w.location = WaterLocationData()
                 w.location.siteID = siteID
                 w.location.siteName = name
-                w.flowRate_cfs = random.uniform(200, 5000)
+                
+                # Simulate values that occasionally trigger flood alerts
+                if siteID == 'USGS-01646500':
+                    w.flowRate_cfs = random.uniform(5000, 30000)  # Potomac: threshold 25000
+                elif siteID == 'USGS-06730500':
+                    w.flowRate_cfs = random.uniform(100, 1000)    # Boulder: threshold 800
+                else:
+                    w.flowRate_cfs = random.uniform(3000, 18000)  # James: threshold 15000
+                    
                 w.waterLevel_ft = random.uniform(1, 15)
                 w.waterTemperature_c = random.uniform(5, 25)
                 visualizer.handleIncomingWaterData(w)

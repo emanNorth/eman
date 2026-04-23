@@ -16,6 +16,6 @@ class WaterLocationData():
         self.country: str = ""
         self.latitude: float = 0.0
         self.longitude: float = 0.0 
-        self.elevation: float = 0.0
+        
 
 

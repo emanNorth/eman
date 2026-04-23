@@ -170,8 +170,8 @@ class WaterServiceManager():
             locData.state = "MD"
             locData.county = "Montgomery County"
             locData.country = "USA"
-            locData.latitude = 38.94977778
-            locData.longitude = -77.12763889
+            locData.latitude = 0.0
+            locData.longitude = 0.0
             return locData
         
         elif siteID == "USGS-11455420":
@@ -182,8 +182,8 @@ class WaterServiceManager():
             locData.state = "CA"
             locData.county = "Sacramento County"
             locData.country = "USA"
-            locData.latitude = 38.153281
-            locData.longitude = -121.687008
+            locData.latitude = 0.0
+            locData.longitude = 0.0
             return locData
         
         elif siteID == "USGS-09380000":
@@ -194,8 +194,8 @@ class WaterServiceManager():
             locData.state = "AZ"
             locData.county = "Coconino County"
             locData.country = "USA"
-            locData.latitude = 36.864333333333335
-            locData.longitude = -111.58787222222222
+            locData.latitude = 0.0
+            locData.longitude = 0.0
             return locData
         
         else:
